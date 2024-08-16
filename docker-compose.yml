@@ -1,0 +1,54 @@
+services:
+   db:
+     container_name: geoserver-db
+     image: postgis/postgis:16-3.4
+     environment:
+       POSTGRES_HOST_AUTH_METHOD: md5
+       PGPORT: 5434
+       POSTGRES_DB: ${POSTGRES_GS_DB}
+       POSTGRES_USER: ${POSTGRES_GS_USER}
+       POSTGRES_PASSWORD: ${POSTGRES_GS_PASS}
+       POSTGRES_INITDB_ARGS: "-c shared_buffers=1GB -c work_mem=50MB -c maintenance_work_mem=10GB -c autovacuum_work_mem=2GB -c wal_level=minimal -c checkpoint_completion_target=0.9 -c max_wal_senders=0 -c random_page_cost=1.0"
+     ports:
+       - ${POSTGRES_GS_PORT}:5434
+     healthcheck:
+       test: "PGPASSWORD=${POSTGRES_GS_PASS} pg_isready -h 127.0.0.1 -U ${POSTGRES_GS_USER} -d ${POSTGRES_GS_DB} -p 5434"
+       interval: 1m30s
+       timeout: 10s
+       retries: 3
+       start_period: 1m
+     restart: on-failure
+     volumes:
+       - ./geoserver-data/db:/var/lib/postgresql
+
+   geoserver:
+      container_name: geoserver
+      image: emp/geoserver:latest
+      volumes:
+        - ./geoserver-data:/opt/geoserver/data_dir
+      ports:
+        - ${GEOSERVER_PORT}:8080
+      restart: on-failure
+      environment:
+        - GEOSERVER_DATA_DIR=${GEOSERVER_DATA_DIR}
+        - GEOWEBCACHE_CACHE_DIR=${GEOWEBCACHE_CACHE_DIR}
+        - GEOSERVER_ADMIN_PASSWORD=${GEOSERVER_ADMIN_PASSWORD}
+        - GEOSERVER_ADMIN_USER=${GEOSERVER_ADMIN_USER}
+        - INITIAL_MEMORY=${INITIAL_MEMORY}
+        - MAXIMUM_MEMORY=${MAXIMUM_MEMORY}
+        - STABLE_EXTENSIONS=${STABLE_EXTENSIONS}
+        - COMMUNITY_EXTENSIONS=${COMMUNITY_EXTENSIONS}
+        - GEOSERVER_CONTEXT_ROOT=${GEOSERVER_CONTEXT_ROOT}
+        - AWS_ACCESS_KEY=${AWS_ACCESS_KEY}
+        - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+        - AWS_S3_URL=${AWS_S3_URL}
+        - AWS_S3_SYNC=${AWS_S3_SYNC}
+      depends_on:
+        db:
+          condition: service_healthy
+      healthcheck:
+        test: [ "CMD-SHELL", "curl --fail --silent --write-out 'HTTP CODE : %{http_code}\n' --output /dev/null -u $${GEOSERVER_ADMIN_USER}:$${GEOSERVER_ADMIN_PASSWORD} http://localhost:8080/geoserver/rest/about/version.xml" ]
+        interval: 1m30s
+        timeout: 10s
+        retries: 3
+        start_period: 1m
